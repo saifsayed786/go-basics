@@ -1,0 +1,161 @@
+basePath: /api/v1/
+host: localhost:8080
+info:
+  contact:
+    name: API Support
+  description: Golang basic API.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: GOLANG BASIC STRUCTURE
+  version: "1.0"
+paths:
+  /api/v1/auth/admin/create:
+    post:
+      consumes:
+      - application/json
+      description: API Endpoint to register the user with the role of Supervisor or
+        Admin.
+      parameters:
+      - in: formData
+        name: confirmPassword
+        required: true
+        type: string
+      - in: formData
+        name: email
+        required: true
+        type: string
+      - in: formData
+        name: firstName
+        required: true
+        type: string
+      - in: formData
+        name: lastName
+        required: true
+        type: string
+      - in: formData
+        name: password
+        required: true
+        type: string
+      produces:
+      - application/json
+      summary: CreateAdmin endpoint is used by the admin role user to create a new
+        admin or supervisor account.
+      tags:
+      - admin
+  /api/v1/auth/category/:
+    get:
+      consumes:
+      - application/json
+      description: API Endpoint to register the user with the role of Supervisor or
+        Admin.
+      produces:
+      - application/json
+      summary: ListAllCategories endpoint is used to list all the categories.
+      tags:
+      - category
+  /api/v1/auth/category/:id/:
+    get:
+      consumes:
+      - application/json
+      description: GetCategory endpoint is used to get info of a category.
+      produces:
+      - application/json
+      summary: GetCategory endpoint is used to get info of a category..
+      tags:
+      - product
+    put:
+      consumes:
+      - application/json
+      description: UpdateCatagory endpoint is used to get info of a category.
+      produces:
+      - application/json
+      summary: UpdateCatagory endpoint is used to get info of a category..
+      tags:
+      - product
+  /api/v1/auth/category/create:
+    post:
+      consumes:
+      - application/json
+      description: API Endpoint to register the user with the role of Supervisor or
+        Admin.
+      parameters:
+      - description: name of the category
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      summary: CreateCategory endpoint is used by admin to create category.
+      tags:
+      - category
+  /api/v1/auth/product/:
+    get:
+      consumes:
+      - application/json
+      description: API Endpoint to register the user with the role of Supervisor or
+        Admin.
+      produces:
+      - application/json
+      summary: ListAllProduct endpoint is used to list all products.
+      tags:
+      - product
+  /api/v1/auth/product/:id/:
+    get:
+      consumes:
+      - application/json
+      description: GetProduct endpoint is used to get info of a product.
+      parameters:
+      - description: name of the product
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      summary: GetProduct endpoint is used to get info of a product..
+      tags:
+      - product
+    patch:
+      consumes:
+      - application/json
+      description: UpdateProduct endpoint is used by the supervisor role user to update
+        a new product
+      parameters:
+      - description: name of the product
+        in: formData
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      summary: UpdateProduct endpoint is used by the supervisor role user to update
+        a new product.
+      tags:
+      - product
+  /api/v1/auth/product/create:
+    post:
+      consumes:
+      - application/json
+      description: CreateProduct endpoint is used by the supervisor role user to create
+        a new product
+      parameters:
+      - description: name of the product
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: id of the category
+        in: formData
+        name: category_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      summary: CreateProduct endpoint is used by the supervisor role user to create
+        a new product.
+      tags:
+      - product
+swagger: "2.0"

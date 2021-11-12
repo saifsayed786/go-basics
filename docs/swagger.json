@@ -1,0 +1,226 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Golang basic API.",
+        "title": "GOLANG BASIC STRUCTURE",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v1/",
+    "paths": {
+        "/api/v1/auth/admin/create": {
+            "post": {
+                "description": "API Endpoint to register the user with the role of Supervisor or Admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "CreateAdmin endpoint is used by the admin role user to create a new admin or supervisor account.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "confirmPassword",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "email",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "firstName",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "lastName",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "name": "password",
+                        "in": "formData",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/category/": {
+            "get": {
+                "description": "API Endpoint to register the user with the role of Supervisor or Admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "category"
+                ],
+                "summary": "ListAllCategories endpoint is used to list all the categories."
+            }
+        },
+        "/api/v1/auth/category/:id/": {
+            "get": {
+                "description": "GetCategory endpoint is used to get info of a category.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "GetCategory endpoint is used to get info of a category.."
+            },
+            "put": {
+                "description": "UpdateCatagory endpoint is used to get info of a category.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "UpdateCatagory endpoint is used to get info of a category.."
+            }
+        },
+        "/api/v1/auth/category/create": {
+            "post": {
+                "description": "API Endpoint to register the user with the role of Supervisor or Admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "category"
+                ],
+                "summary": "CreateCategory endpoint is used by admin to create category.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "name of the category",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/product/": {
+            "get": {
+                "description": "API Endpoint to register the user with the role of Supervisor or Admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "ListAllProduct endpoint is used to list all products."
+            }
+        },
+        "/api/v1/auth/product/:id/": {
+            "get": {
+                "description": "GetProduct endpoint is used to get info of a product.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "GetProduct endpoint is used to get info of a product..",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "name of the product",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    }
+                ]
+            },
+            "patch": {
+                "description": "UpdateProduct endpoint is used by the supervisor role user to update a new product",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "UpdateProduct endpoint is used by the supervisor role user to update a new product.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "name of the product",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/api/v1/auth/product/create": {
+            "post": {
+                "description": "CreateProduct endpoint is used by the supervisor role user to create a new product",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "product"
+                ],
+                "summary": "CreateProduct endpoint is used by the supervisor role user to create a new product.",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "name of the product",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "id of the category",
+                        "name": "category_id",
+                        "in": "formData",
+                        "required": true
+                    }
+                ]
+            }
+        }
+    }
+}

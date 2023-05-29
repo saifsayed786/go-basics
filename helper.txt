@@ -1,0 +1,983 @@
+package service
+
+import (
+	"bufio"
+	"bytes"
+	"chartdataservice/models"
+	"compress/gzip"
+	"encoding/csv"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/http/cookiejar"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/TecXLab/libdb/contracts"
+	"github.com/TecXLab/liblogs"
+	"github.com/gin-gonic/gin"
+	"github.com/golobby/container/v3"
+	"github.com/rs/zerolog"
+)
+
+var Httpclient http.Client
+var ReplacePath string
+var RemoteServer string
+
+func InitCookie() {
+	var zerologs zerolog.Logger
+	container.NamedResolve(&zerologs, "zerologs")
+	Logger("In Cookie", nil, liblogs.Info, liblogs.ZEROLOG)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		Logger("Got error while creating cookie jar ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalf("Got error while creating cookie jar %s", err.Error())
+	}
+	Httpclient = http.Client{
+		Jar: jar,
+	}
+}
+func HttpGet(url string) []byte {
+	var zerologs zerolog.Logger
+	container.NamedResolve(&zerologs, "zerologs")
+	zerologs.Info().Msg("In HttpGet")
+	Logger("In HttpGet", nil, liblogs.Info, liblogs.ZEROLOG)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		Logger("Got error ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalf("Got error %s", err.Error())
+	}
+	resp, err := Httpclient.Do(req)
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalf("Error occured. Error is: %s", err.Error())
+		return nil
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalln(err)
+	}
+	return body
+}
+
+type DataStruct struct {
+	Table []interface{} `json:"Table"`
+}
+
+func ParseData(buff []byte) (string, error) {
+	var data DataStruct
+	json.Unmarshal([]byte(buff), &data)
+	res1B, _ := json.Marshal(data.Table)
+	//fmt.Println(string(res1B))
+	return string(res1B), nil
+}
+func HttpPost(url string, c *gin.Context) []byte {
+	var zerologs zerolog.Logger
+	container.NamedResolve(&zerologs, "zerologs")
+	Logger("In HttpPost", nil, liblogs.Info, liblogs.ZEROLOG)
+
+	jsonData, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatal(err)
+	}
+	proxyReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalf("Got error %s", err.Error())
+	}
+	proxyReq.Header = make(http.Header)
+	for h, val := range c.Request.Header {
+		proxyReq.Header[h] = val
+	}
+	client := &http.Client{}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		return nil
+
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		Logger("Error occured. Error is: ", err, liblogs.Error, liblogs.ZEROLOG)
+
+		log.Fatalln(err)
+	}
+	return body
+}
+func CoreHeader(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length,content-type, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With,x-access-token")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+}
+func Unique(s []int) []int {
+	inResult := make(map[int]bool)
+	var result []int
+	for _, str := range s {
+		if _, ok := inResult[str]; !ok {
+			inResult[str] = true
+			result = append(result, str)
+		}
+	}
+	return result
+}
+func LogPanic() {
+	fmt.Println("RECOVER: LogPanic Start")
+	var zerologs zerolog.Logger
+	container.NamedResolve(&zerologs, "zerologs")
+	p := recover()
+	if p != nil {
+		fmt.Println("Stack Trace: " + string(debug.Stack()))
+		Logger("Stack Trace: "+string(debug.Stack()), nil, liblogs.Error, liblogs.ZEROLOG)
+
+		Logger("RECOVER"+string(debug.Stack()), nil, liblogs.Debug, liblogs.PRINT)
+
+	} else {
+		Logger("In RECOVER", nil, liblogs.Debug, liblogs.PRINT)
+
+	}
+	Logger("RECOVER: LogPanic End", nil, liblogs.Debug, liblogs.PRINT)
+
+}
+
+var MinuteMap = map[string]int16{
+	"1Min":   1,
+	"2Min":   2,
+	"3Min":   3,
+	"4Min":   4,
+	"5Min":   5,
+	"10Min":  10,
+	"15Min":  15,
+	"30Min":  30,
+	"75Min":  75,
+	"125Min": 125,
+	"1Hr":    60,
+	"2Hr":    120,
+	"3Hr":    180,
+	"1Day":   720,
+}
+var ExIds = map[string]int16{
+	"nsefo": 1,
+	"nseeq": 2,
+	"nsecd": 3,
+}
+var EnumNSECMInstrumentType = map[string]int{
+	"Equities":          0,
+	"Preference_Shares": 1,
+	"Debentures":        2,
+	"Warrants":          3,
+	"Miscellaneous":     4,
+}
+
+func getMaxToken(focontract []contracts.Contract_NSEFO, eqcontract []contracts.Contract_NSEEQ, cdcontract []contracts.Contract_NSECD, IndexMaster []models.IndexMaster) int {
+
+	var maxtoken int = 0
+	var temp int = 0
+	for _, v := range focontract {
+		if v.NToken > temp {
+			temp = v.NToken
+			maxtoken = temp
+		}
+	}
+	for _, v := range eqcontract {
+		if v.NToken > temp {
+			temp = v.NToken
+			maxtoken = temp
+		}
+	}
+	for _, v := range cdcontract {
+		if v.NToken > temp {
+			temp = v.NToken
+			maxtoken = temp
+		}
+	}
+
+	for _, v := range IndexMaster {
+		if int(v.Ntoken) > temp {
+			temp = int(v.Ntoken)
+			maxtoken = temp
+		}
+	}
+
+	return maxtoken
+}
+
+func getContractDay() int64 {
+	t1 := time.Date(2018, time.Month(1), 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Now()
+	days := int64(t2.Sub(t1).Hours() / 24)
+	return days
+}
+
+func StoreContract(token int, ExId interface{}) string {
+	var SlackMsg string
+	SlackMsg += "BOD CRON\nStoreContract Start\n"
+	start := time.Now()
+	Logger("StoreContract Start", nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+
+	var (
+		nsefo       []contracts.Contract_NSEFO
+		nseeq       []contracts.Contract_NSEEQ
+		nsecd       []contracts.Contract_NSECD
+		IndexMaster []models.IndexMaster
+	)
+	days := getContractDay()
+	var sCDay = time.Now().Format("2006-01-02 15:04:05") + " Todays Day Number :" + strconv.Itoa(int(days))
+	Logger(sCDay, nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+
+	SlackMsg += sCDay + "\n"
+
+	if token != 0 {
+		if ExId.(int16) == ExIds["nseeq"] {
+			db.Client.Where("n_contract_date=? and n_instrument_type=? and n_token=?", days, EnumNSECMInstrumentType["Equities"], token).Find(&nseeq)
+		} else if ExId.(int16) == ExIds["nsefo"] {
+			db.Client.Where("n_contract_date=? and n_token=?", days, token).Find(&nsefo)
+		} else if ExId.(int16) == ExIds["nsecd"] {
+			db.Client.Where("n_contract_date=?  and token=?", days, token).Find(&nsecd)
+		}
+
+	} else {
+		db.Client.Where("n_contract_date=? AND (s_sec_normal_mkt_eligibility=? OR s_sec_additional_mkt_eligibility2=?) AND (n_instrument_type = ? OR n_instrument_type = ?)", days, "1", "1", EnumNSECMInstrumentType["Equities"], EnumNSECMInstrumentType["Miscellaneous"]).Find(&nseeq)
+
+		db.Client.Where("n_contract_date=?", days).Find(&nsefo)
+
+		db.Client.Where("n_contract_date=?", days).Find(&nsecd)
+	}
+
+	IndexMaster = GetIndexMaster()
+
+	SlackMsg += "nsefo Count: " + fmt.Sprint(len(nsefo)) + "\n" + "nseeq Count: " + fmt.Sprint(len(nseeq)) + "\n" + "nsecd Count: " + fmt.Sprint(len(nsecd)) + "\n" + "IndexMaster Count: " + fmt.Sprint(len(IndexMaster)) + "\n"
+
+	Logger(fmt.Sprintf("nseeq Count %d", len(nsefo)), nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+	Logger(fmt.Sprintf("nsefo Count %d", len(nseeq)), nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+	Logger(fmt.Sprintf("nsecd Count %d", len(nsecd)), nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+	Logger(fmt.Sprintf("IndexMaster Count %d", len(IndexMaster)), nil, liblogs.Info, liblogs.ZEROLOG|liblogs.PRINT)
+
+	maxtoken := getMaxToken(nsefo, nseeq, nsecd, IndexMaster)
+	Logger("Max Token Number : "+strconv.Itoa(maxtoken), nil, liblogs.Info, liblogs.PRINT)
+
+	SlackMsg += "Max Token Number : " + strconv.Itoa(maxtoken) + "\n"
+	StoreInit(maxtoken + 1)
+
+	fmt.Println("Mapping Start")
+	SlackMsg += "Mapping Start\n"
+	Logger("Mapping Start", nil, liblogs.Info, liblogs.ZEROLOG)
+
+	if len(nsefo) > 0 {
+		MappingContract(nsefo)
+	}
+
+	if len(nseeq) > 0 {
+		MappingContract(nseeq)
+	}
+
+	if len(nsecd) > 0 {
+		MappingContract(nsecd)
+	}
+
+	if len(IndexMaster) > 0 {
+		IndexMasterMapping(IndexMaster)
+	}
+
+	SlackMsg += "Mapping End\n"
+
+	Logger("Mapping End", nil, liblogs.Info, liblogs.PRINT)
+	Logger("StoreContract End", nil, liblogs.Info, liblogs.PRINT)
+
+	SlackMsg += "StoreContract End\n"
+	Logger(fmt.Sprintf("StoreContract, execution time:  %s\n", time.Since(start)), nil, liblogs.Info, liblogs.PRINT)
+
+	SlackMsg += "StoreContract, execution time: " + time.Since(start).String() + "\n"
+	return SlackMsg
+}
+
+func MappingContract(model interface{}) {
+	// sTodaysDate := GetCurrentDate()
+	if reflect.TypeOf(model) == reflect.TypeOf([]contracts.Contract_NSEFO{}) {
+		foContract := model.([]contracts.Contract_NSEFO)
+		for i := range foContract {
+			Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails = models.ContractDetails{NContractDate: foContract[i].NContractDate,
+				SInstrumentName: foContract[i].SInstrumentName,
+				SSymbol:         foContract[i].SSymbol,
+				NExpiryDate:     int64(foContract[i].NExpiryDate),
+				SOptionType:     foContract[i].SOptionType,
+				NStrikePrice:    int64(foContract[i].NStrikePrice),
+				NToken:          int64(foContract[i].NToken)}
+
+			if foContract[i].NStrikePrice > 0 {
+				expiryDate := ConvertDateTime1980(int64(foContract[i].NExpiryDate))
+				strikePrice := strconv.FormatInt(int64(foContract[i].NStrikePrice/100), 10)
+				//TCS29SEP22C2460
+				var b bytes.Buffer
+				b.WriteString(foContract[i].SSymbol)
+				b.WriteString(expiryDate)
+				if foContract[i].SOptionType == "CE" {
+					b.WriteString("C")
+				} else if foContract[i].SOptionType == "PE" {
+					b.WriteString("P")
+				}
+				b.WriteString(strikePrice)
+
+				if len(ContractStore[ExIds["nsefo"]].Contracts) == 0 {
+					ContractStore[ExIds["nsefo"]].Contracts = make(map[string]*models.ContractDetails)
+				}
+				Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails.SFullName = b.String()
+				ContractStore[ExIds["nsefo"]].Contracts[b.String()] = &Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails
+				// sFullName := Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails.SFullName
+				// for minute := range MinuteMap {
+				// 	CreateAllDir(sFullName, minute, ExIds["nsefo"], sTodaysDate)
+				// }
+
+			} else if foContract[i].NStrikePrice == -1 {
+				//TCS27OCT22F
+				expiryDate := ConvertDateTime1980(int64(foContract[i].NExpiryDate))
+				var b bytes.Buffer
+				b.WriteString(foContract[i].SSymbol)
+				b.WriteString(expiryDate)
+				b.WriteString("F")
+				if len(ContractStore[ExIds["nsefo"]].Contracts) == 0 {
+					ContractStore[ExIds["nsefo"]].Contracts = make(map[string]*models.ContractDetails)
+				}
+				Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails.SFullName = b.String()
+				ContractStore[ExIds["nsefo"]].Contracts[b.String()] = &Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails
+				// sFullName := Store[foContract[i].NToken][ExIds["nsefo"]].ContractDetails.SFullName
+				// for minute := range MinuteMap {
+				// 	CreateAllDir(sFullName, minute, ExIds["nsefo"], sTodaysDate)
+				// }
+				// if foContract[i].NToken == 54889 {
+				// 	fmt.Println(b.String())
+				// }
+			}
+			Add_CDS_NSEFO_Total_Token_Count()
+		}
+
+	} else if reflect.TypeOf(model) == reflect.TypeOf([]contracts.Contract_NSEEQ{}) {
+		eqContract := model.([]contracts.Contract_NSEEQ)
+		for i := range eqContract {
+			Store[eqContract[i].NToken][ExIds["nseeq"]].ContractDetails = models.ContractDetails{NContractDate: int64(eqContract[i].NContractDate),
+				SInstrumentName: "EQ",
+				SSymbol:         eqContract[i].SSymbol,
+				NExpiryDate:     int64(eqContract[i].NExpiryDate),
+				NToken:          int64(eqContract[i].NToken),
+				SFullName:       eqContract[i].SSymbol}
+
+			if len(ContractStore[ExIds["nseeq"]].Contracts) == 0 {
+				ContractStore[ExIds["nseeq"]].Contracts = make(map[string]*models.ContractDetails)
+			}
+			ContractStore[ExIds["nseeq"]].Contracts[eqContract[i].SSymbol] = &Store[eqContract[i].NToken][ExIds["nseeq"]].ContractDetails
+			// sFullName := Store[eqContract[i].NToken][ExIds["nseeq"]].ContractDetails.SFullName
+			// for minute := range MinuteMap {
+			// 	CreateAllDir(sFullName, minute, ExIds["nseeq"], sTodaysDate)
+			// }
+			Add_CDS_NSEEQ_Total_Token_Count()
+		}
+
+	} else if reflect.TypeOf(model) == reflect.TypeOf([]contracts.Contract_NSECD{}) {
+		cdContract := model.([]contracts.Contract_NSECD)
+		for i := range cdContract {
+			Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails = models.ContractDetails{NContractDate: int64(cdContract[i].NContractDate),
+				SInstrumentName: cdContract[i].SInstrumentName,
+				SSymbol:         cdContract[i].SSymbol,
+				NExpiryDate:     int64(cdContract[i].NExpiryDate),
+				SOptionType:     cdContract[i].SOptionType,
+				NStrikePrice:    int64(cdContract[i].NStrikePrice),
+				NToken:          int64(cdContract[i].NToken)}
+
+			if cdContract[i].NStrikePrice > 0 {
+				expiryDate := ConvertDateTime1980(int64(cdContract[i].NExpiryDate))
+				NStrikePrice := float64(cdContract[i].NStrikePrice) / NSECD_DECIMAL_LOCATOR
+				//TCS29SEP22C2460
+				var b bytes.Buffer
+				b.WriteString(cdContract[i].SSymbol)
+				b.WriteString(expiryDate)
+				if cdContract[i].SOptionType == "CE" {
+					b.WriteString("C")
+				} else if cdContract[i].SOptionType == "PE" {
+					b.WriteString("P")
+				}
+				b.WriteString(fmt.Sprintf("%v", NStrikePrice))
+
+				if len(ContractStore[ExIds["nsecd"]].Contracts) == 0 {
+					ContractStore[ExIds["nsecd"]].Contracts = make(map[string]*models.ContractDetails)
+				}
+				Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails.SFullName = b.String()
+				ContractStore[ExIds["nsecd"]].Contracts[b.String()] = &Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails
+				// sFullName := Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails.SFullName
+				// for minute := range MinuteMap {
+				// 	CreateAllDir(sFullName, minute, ExIds["nsecd"], sTodaysDate)
+				// }
+
+			} else if cdContract[i].NStrikePrice == 0 {
+				//TCS27OCT22F
+				expiryDate := ConvertDateTime1980(int64(cdContract[i].NExpiryDate))
+				var b bytes.Buffer
+				b.WriteString(cdContract[i].SSymbol)
+				b.WriteString(expiryDate)
+				b.WriteString("F")
+				if len(ContractStore[ExIds["nsecd"]].Contracts) == 0 {
+					ContractStore[ExIds["nsecd"]].Contracts = make(map[string]*models.ContractDetails)
+				}
+				Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails.SFullName = b.String()
+				ContractStore[ExIds["nsecd"]].Contracts[b.String()] = &Store[cdContract[i].NToken][ExIds["nsecd"]].ContractDetails
+				// sFullName := Store[foContract[i].NToken][ExIds["nsecd"]].ContractDetails.SFullName
+				// for minute := range MinuteMap {
+				// 	CreateAllDir(sFullName, minute, ExIds["nsecd"], sTodaysDate)
+				// }
+				// if foContract[i].NToken == 54889 {
+				// 	fmt.Println(b.String())
+				// }
+			}
+			Add_CDS_NSECD_Total_Token_Count()
+		}
+	}
+}
+
+func GetdateRange(fromDate, toDate string) []string {
+	var timeSlice []string
+	start, _ := time.Parse(DateRangeFormat, fromDate)
+	end, _ := time.Parse(DateRangeFormat, toDate)
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		timeSlice = append(timeSlice, d.Format(DateRangeFormat))
+	}
+	return timeSlice
+}
+
+func GetTodaysStore(Exch int, FileName, MinuteFolder, ToDate string) [][]string {
+	var (
+		//MapKeys    []time.Time
+		storedata  [][]string
+		ExchString string
+	)
+	switch {
+	case Exch == 1:
+		ExchString = "nsefo"
+	case Exch == 2:
+		ExchString = "nseeq"
+	case Exch == 3:
+		ExchString = "nsecd"
+	default:
+		return nil
+	}
+	_, ok := ContractStore[Exch].Contracts[FileName]
+	if !ok {
+		return nil
+	}
+	token := ContractStore[Exch].Contracts[FileName].NToken
+	if token > 0 {
+		if len(Store[int(token)][ExIds[ExchString]].StoreMap) > 0 {
+			_, ok := Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder]
+			if ok {
+				var tempCSVMap = Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder].CSVMap
+				if len(tempCSVMap) > 0 {
+					if len(Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder].KeySlice) > 0 {
+						// fmt.Println("Slice Len : " + strconv.Itoa(len(Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder].KeySlice)) + " Map len:" + strconv.Itoa(len(tempCSVMap)))
+						var tempKeySlice = Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder].KeySlice
+						for i := len(tempKeySlice) - 1; i >= 0; i-- {
+							//fmt.Println(tempKeySlice[i])
+							storedata = append(storedata, strings.Split(Store[int(token)][ExIds[ExchString]].StoreMap[MinuteFolder].CSVMap[tempKeySlice[i]].CSVarr, ","))
+						}
+					}
+				}
+			}
+		}
+	}
+	return storedata
+}
+
+func StringToFloat64(s string) interface{} {
+	floatValue, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return floatValue
+}
+
+func StringToFloat64_New(s string) float64 {
+	floatValue, _ := strconv.ParseFloat(s, 64)
+	return floatValue
+}
+
+func InsertInStore(lineToInsert []string, contract models.ContractDetails, ExId int16) {
+
+	for i := range lineToInsert {
+		if lineToInsert[i] != "" {
+			storeInsert := strings.Split(lineToInsert[i], ",")
+			if len(storeInsert) < 6 {
+				continue
+			}
+			DtLogDateTime := strings.Split(storeInsert[0], "+")[0]
+			openPrice := StringToFloat64(storeInsert[1])
+			highPrice := StringToFloat64(storeInsert[2])
+			lowPrice := StringToFloat64(storeInsert[3])
+			closePrice := StringToFloat64(storeInsert[4])
+
+			volumestring := strings.Fields(storeInsert[5])[0]
+			volume := StringToFloat64(volumestring)
+
+			switch ExId {
+			case 1:
+				obj := models.ChartHLOCModel{
+					NToken:        int(contract.NToken),
+					DtLogDateTime: DtLogDateTime,
+					NOpenPrice:    openPrice.(float64),
+					NHighPrice:    highPrice.(float64),
+					NLowPrice:     lowPrice.(float64),
+					NClosingPrice: closePrice.(float64),
+					NVolume:       volume.(float64),
+					ExchId:        int16(ExId),
+				}
+				for minute, val := range MinuteMap {
+					CreateTimeFrameFile(obj, val, minute)
+				}
+
+			case 2:
+				obj := models.ChartHLOCModel{
+					NToken:        int(contract.NToken),
+					DtLogDateTime: DtLogDateTime,
+					NOpenPrice:    openPrice.(float64),
+					NHighPrice:    highPrice.(float64),
+					NLowPrice:     lowPrice.(float64),
+					NClosingPrice: closePrice.(float64),
+					NVolume:       volume.(float64),
+					ExchId:        ExId,
+				}
+				for minute, val := range MinuteMap {
+					CreateTimeFrameFile(obj, val, minute)
+				}
+
+			case 3:
+				obj := models.ChartHLOCModel{
+					NToken:        int(contract.NToken),
+					DtLogDateTime: DtLogDateTime,
+					NOpenPrice:    openPrice.(float64),
+					NHighPrice:    highPrice.(float64),
+					NLowPrice:     lowPrice.(float64),
+					NClosingPrice: closePrice.(float64),
+					NVolume:       volume.(float64),
+					ExchId:        ExId,
+				}
+				for minute, val := range MinuteMap {
+					CreateTimeFrameFile(obj, val, minute)
+				}
+
+			}
+		}
+	}
+
+}
+func GetTypeOf(value interface{}) int {
+	// "nsefo": 1,
+	// "nseeq": 2,
+	// "nsecd": 3,
+	switch value.(type) {
+	case contracts.Contract_NSEFO:
+		return 1
+	case contracts.Contract_NSEEQ:
+		return 2
+	case contracts.Contract_NSECD:
+		return 3
+	}
+	return 0
+
+}
+func ConvertDateTime1980(NExpiryDate int64) string {
+	timenew := Epoch1980.Add(time.Duration(NExpiryDate) * time.Second)
+	SExpiryDate := timenew.Format("02Jan06")
+	return strings.ToUpper(SExpiryDate)
+}
+func NewConvertDateTime1980(NExpiryDate int64) (time.Time, string) {
+	timenew := Epoch1980.Add(time.Duration(NExpiryDate) * time.Second)
+	SExpiryDate := timenew.Format("02Jan06")
+	return timenew, strings.ToUpper(SExpiryDate)
+}
+
+func IndexMasterMapping(IndexMaster []models.IndexMaster) {
+	for i := range IndexMaster {
+		Store[IndexMaster[i].Ntoken][IndexMaster[i].NExchangeId].ContractDetails = models.ContractDetails{
+			NToken:    IndexMaster[i].Ntoken,
+			SSymbol:   strings.ToUpper(IndexMaster[i].SIndexName),
+			SFullName: strings.ToUpper(IndexMaster[i].SSymbol),
+		}
+
+		// SSymbol := strings.ToUpper(IndexMaster[i].SIndexName)
+		// SFullName := strings.ToUpper(IndexMaster[i].SSymbol)
+
+		// println(SSymbol)
+		// println(SFullName)
+
+		if len(ContractStore[IndexMaster[i].NExchangeId].Contracts) == 0 {
+			ContractStore[IndexMaster[i].NExchangeId].Contracts = make(map[string]*models.ContractDetails)
+		}
+		ContractStore[IndexMaster[i].NExchangeId].Contracts[strings.ToUpper(IndexMaster[i].SSymbol)] = &Store[IndexMaster[i].Ntoken][IndexMaster[i].NExchangeId].ContractDetails
+		Add_CDS_INDEX_Master_Total_Token_Count()
+	}
+}
+
+func GetOS() string {
+	os := runtime.GOOS
+	switch os {
+	case "windows":
+		return "Windows"
+	case "darwin":
+		return "MAC operating system"
+	case "linux":
+		return "Linux"
+	}
+	return "No OS Found"
+}
+func GetCurrentDate() string {
+	return time.Now().Format("20060102")
+}
+func WriteRequestFile(objData models.NewChartRespModel) {
+	var path string
+	if objData.ExchID == ExIds["nseeq"] {
+		path = Env.VOLUMNE_PATH + "/" + BasePath + "/" + RawPath + "/" + EqPath + "/" + GetCurrentDate()
+	} else if objData.ExchID == ExIds["nsefo"] {
+		path = Env.VOLUMNE_PATH + "/" + BasePath + "/" + RawPath + "/" + FoPath + "/" + GetCurrentDate()
+	} else if objData.ExchID == ExIds["nsecd"] {
+		path = Env.VOLUMNE_PATH + "/" + BasePath + "/" + RawPath + "/" + CdPath + "/" + GetCurrentDate()
+	}
+
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			Logger("Error Creating directory"+path, err, liblogs.Error, liblogs.ZEROLOG|liblogs.PRINT)
+
+		}
+	}
+
+	file, err := os.OpenFile(path+"/"+objData.DateTime+".txt", os.O_WRONLY|os.O_CREATE, 0777)
+	if err != nil {
+		file, _ = os.OpenFile(path+"/"+objData.DateTime+".txt", os.O_CREATE|os.O_WRONLY, 0777)
+	}
+
+	if err != nil {
+		Logger("Message: "+path, err, liblogs.Error, liblogs.PRINT)
+
+		return
+	}
+	defer file.Close()
+	jsonString, err := json.Marshal(objData)
+	if err != nil {
+		Logger("Message: "+path, err, liblogs.Error, liblogs.PRINT)
+
+		return
+
+	}
+	// file.Write(jsonString)
+
+	wr := bufio.NewWriter(file)
+	wr.WriteString(string(jsonString))
+	err = wr.Flush()
+	// if err != nil {
+	// 	return err
+	// }
+	err = file.Sync()
+}
+func CsvReadFile(newpath string, file string) ([][]string, error) {
+	csvFile, err := os.Open(newpath + file + ".csv")
+	if err != nil {
+		//fmt.Println(err)
+		return nil, err
+	}
+	defer csvFile.Close()
+	reader := csv.NewReader(csvFile)
+	reader.LazyQuotes = true
+	readContent, err := reader.ReadAll()
+	if err != nil {
+		//fmt.Println(err)
+	}
+	return readContent, nil
+}
+
+// func SentToContractCronJob(str string) error {
+
+// 	return nil
+// 	Logger(str,nil,liblogs.Info,liblogs.ZEROLOG)
+// 	// var zerologs zerolog.Logger
+// 	var objSlackMessage models.SlackMessage
+// 	objSlackMessage.Text = str
+
+// 	jsonStr, err := json.Marshal(objSlackMessage)
+// 	if err != nil {
+// 		// zerologs.Debug().Stack().Err(err).Msg("Error in marshalling objSlackMessage")
+// 		Logger("Error in marshalling objSlackMessage", err, liblogs.Error, liblogs.ZEROLOG)
+
+// 		return err
+// 	}
+// 	//need to change url
+// 	req, err := http.NewRequest("POST", "https://hooks.slack.com/services/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", bytes.NewBuffer(jsonStr))
+// 	if err != nil {
+// 		Logger("Error While Sending POST Request to SentToContractCronJob", err, liblogs.Error, liblogs.ZEROLOG)
+
+// 		// zerologs.Debug().Stack().Err(err).Msg("Error While Sending POST Request to SentToContractCronJob")
+// 		return err
+// 	}
+// 	req.Header.Set("Content-type", "application/json")
+// 	client := &http.Client{}
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		Logger("Error while Getting response from SentToContractCronJob", err, liblogs.Error, liblogs.ZEROLOG)
+
+// 		// zerologs.Debug().Stack().Err(err).Msg("Error while Getting response from SentToContractCronJob")
+// 		return err
+// 	}
+// 	defer resp.Body.Close()
+// 	return nil
+// }
+
+func GetMinuteMap() map[string]int16 {
+	return MinuteMap
+}
+
+func GetExchngeName(nExID int16) string {
+	for sExName, nVal := range ExIds {
+		if nVal == nExID {
+			return sExName
+		}
+	}
+	return ""
+}
+
+func GetIndexMaster() []models.IndexMaster {
+	var IndexMaster []models.IndexMaster
+	resp, err := http.Get("https://nuuu.com/contractmaster/getindexmaster")
+	if err != nil {
+		Logger("Message: ", err, liblogs.Error, liblogs.PRINT)
+		fmt.Println(err)
+
+		// log.Fatalln(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		Logger("Message: ", err, liblogs.Error, liblogs.PRINT)
+
+		// log.Fatalln(err)
+	}
+	err = json.Unmarshal(body, &IndexMaster)
+	if err != nil {
+		Logger("Message: ", err, liblogs.Error, liblogs.PRINT)
+
+		// fmt.Println(err)
+	}
+
+	return IndexMaster
+}
+
+func GetFilesFromLocal(Exch int16, fromDate, toDate string) ([]string, error) {
+	var localPath string
+	switch {
+	case Exch == 1:
+		localPath = Env.VOLUMNE_PATH + "/" + BasePath + "/" + FoPath + "/"
+
+	case Exch == 2:
+		localPath = Env.VOLUMNE_PATH + "/" + BasePath + "/" + EqPath + "/"
+
+	case Exch == 3:
+	}
+	var files []string
+
+	err := filepath.Walk(localPath, func(path string, info os.FileInfo, err error) error {
+		if strings.Contains(path, ".csv") {
+			dateRange := GetdateRange(fromDate, toDate)
+			for i := range dateRange {
+				if strings.Contains(path, dateRange[i]) {
+					files = append(files, path)
+				}
+			}
+
+		}
+		return nil
+	})
+	if err != nil {
+		Logger("Message: ", err, liblogs.Error, liblogs.PRINT)
+
+		// fmt.Println(err)
+	}
+
+	return files, nil
+}
+
+func Split(r rune) bool {
+	return r == '/' || r == '\\'
+}
+
+func GetToken(Exch int16, symbol string) int64 {
+	if len(ContractStore) >= int(Exch) {
+		_, ok := ContractStore[Exch].Contracts[symbol]
+		if ok {
+			token := ContractStore[Exch].Contracts[symbol].NToken
+			return token
+		}
+	}
+	return -1
+}
+func GetContractDetail(token int, exch int16) models.ContractDetails {
+	contractDetails := Store[token][exch].ContractDetails
+	if contractDetails.NToken%100 == 0 {
+		fmt.Println(contractDetails)
+	}
+	return contractDetails
+}
+func GzipData(data []byte) (compressedData []byte, err error) {
+	var b bytes.Buffer
+	gz := gzip.NewWriter(&b)
+	_, err = gz.Write(data)
+	if err != nil {
+		return
+	}
+	if err = gz.Flush(); err != nil {
+		return
+	}
+	if err = gz.Close(); err != nil {
+		return
+	}
+	compressedData = b.Bytes()
+	return
+}
+func createSfullNameMap() interface{} {
+	var (
+		foContract []contracts.Contract_NSEFO
+		foMap      = make(map[string]models.ContractDetails)
+	)
+	days := getContractDay()
+	db.Client.Where("n_contract_date=?", days).Find(&foContract)
+	if len(foContract) == 0 {
+		return errors.New("no data found in fo contract")
+	}
+	for i := range foContract {
+		if foContract[i].NStrikePrice > 0 {
+			expiryDate := ConvertDateTime1980(int64(foContract[i].NExpiryDate))
+			_, newexpiryDate := NewConvertDateTime1980(int64(foContract[i].NExpiryDate))
+			strikePrice := strconv.FormatInt(int64(foContract[i].NStrikePrice/100), 10)
+			//TCS29SEP22C2460
+			var b bytes.Buffer
+			b.WriteString(foContract[i].SSymbol)
+			b.WriteString(expiryDate)
+			if foContract[i].SOptionType == "CE" {
+				b.WriteString("C")
+			} else if foContract[i].SOptionType == "PE" {
+				b.WriteString("P")
+			}
+			b.WriteString(strikePrice)
+			var newSfullName bytes.Buffer
+			newSfullName.WriteString(foContract[i].SSymbol)
+			newSfullName.WriteString(newexpiryDate)
+			if foContract[i].SOptionType == "CE" {
+				newSfullName.WriteString("C")
+			} else if foContract[i].SOptionType == "PE" {
+				newSfullName.WriteString("P")
+			}
+			newSfullName.WriteString(strikePrice)
+			contract := models.ContractDetails{
+				NContractDate:   foContract[i].NContractDate,
+				SInstrumentName: foContract[i].SInstrumentName,
+				SSymbol:         foContract[i].SSymbol,
+				NExpiryDate:     int64(foContract[i].NExpiryDate),
+				SOptionType:     foContract[i].SOptionType,
+				NStrikePrice:    int64(foContract[i].NStrikePrice),
+				NToken:          int64(foContract[i].NToken),
+				SFullName:       newSfullName.String(),
+			}
+			foMap[b.String()] = contract
+		} else if foContract[i].NStrikePrice == -1 {
+			//TCS27OCT22F
+			expiryDate := ConvertDateTime1980(int64(foContract[i].NExpiryDate))
+			_, newexpiryDate := NewConvertDateTime1980(int64(foContract[i].NExpiryDate))
+			var b bytes.Buffer
+			b.WriteString(foContract[i].SSymbol)
+			b.WriteString(expiryDate)
+			b.WriteString("F")
+			var newSfullName bytes.Buffer
+			newSfullName.WriteString(foContract[i].SSymbol)
+			newSfullName.WriteString(newexpiryDate)
+			newSfullName.WriteString("F")
+			contract := models.ContractDetails{
+				NContractDate:   foContract[i].NContractDate,
+				SInstrumentName: foContract[i].SInstrumentName,
+				SSymbol:         foContract[i].SSymbol,
+				NExpiryDate:     int64(foContract[i].NExpiryDate),
+				SOptionType:     foContract[i].SOptionType,
+				NStrikePrice:    int64(foContract[i].NStrikePrice),
+				NToken:          int64(foContract[i].NToken),
+				SFullName:       newSfullName.String(),
+			}
+			foMap[b.String()] = contract
+		}
+	}
+	return foMap
+}
+func Readdir(path string) ([]string, error) {
+	var files []string
+	folders, err := os.ReadDir(path)
+	if err != nil {
+		fmt.Println("Readdir(): Error reading folder " + path + err.Error())
+		return nil, err
+	}
+	for i := range folders {
+		//1min
+		subfolder, err := os.ReadDir(path + "//" + folders[i].Name())
+		if err != nil {
+			fmt.Println("Readdir(): Error reading folder " + path + "//" + folders[i].Name() + err.Error())
+			return nil, err
+		}
+		for j := range subfolder {
+			files = append(files, path+"//"+folders[i].Name()+"//"+subfolder[j].Name())
+		}
+
+	}
+	return files, nil
+}
+
+func copyFile(src, dst string) (int64, error) {
+	fmt.Println("Copying files")
+	fmt.Println("Source file : " + src)
+	fmt.Println("Destination file : " + dst)
+	sourceFileStat, err := os.Stat(src)
+	if err != nil {
+		return 0, err
+	}
+
+	if !sourceFileStat.Mode().IsRegular() {
+		return 0, fmt.Errorf("%s is not a regular file", src)
+	}
+
+	source, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
+
+	destination, err := os.Create(dst)
+	if err != nil {
+		fmt.Println(err)
+		return 0, err
+	}
+	defer destination.Close()
+	nBytes, err := io.Copy(destination, source)
+	return nBytes, err
+}

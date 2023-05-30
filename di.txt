@@ -1,0 +1,48 @@
+package service
+
+import (
+	"github.com/TecXLab/libdb"
+	"github.com/TecXLab/libdrainer"
+	"github.com/TecXLab/libenv"
+	"github.com/TecXLab/libinterface"
+	"github.com/golobby/container/v3"
+	"github.com/rs/zerolog"
+)
+
+var (
+	// q           *Q
+	q           *libdrainer.Q
+	qfilewriter *libdrainer.Q
+	db          *libdb.ContractMasterDB
+	Env         *libenv.Env
+	zerologs    zerolog.Logger
+)
+
+func InitDI() error {
+	err := container.Resolve(&Env)
+	if err != nil {
+		panic("Env Lib Not Initialize" + err.Error())
+	}
+	err = container.NamedResolve(&zerologs, "zerologs")
+	if err != nil {
+		panic("Log Lib Not Initialize" + err.Error())
+	}
+	err = container.NamedResolve(&q, "userdrainer")
+	if err != nil {
+		panic("Drainer Lib Not Initialize" + err.Error())
+	}
+	err = container.NamedResolve(&qfilewriter, "userdrainer")
+	if err != nil {
+		panic("Drainer Lib Not Initialize" + err.Error())
+	}
+	var userdb libinterface.IDBContract
+	err = container.NamedResolve(&userdb, Env.DI_DB_CONTRACTS)
+	if err != nil {
+		panic("Database Lib Not Initialize" + err.Error())
+	}
+	if userdb == nil {
+		panic("Userdb object is Null")
+	}
+	db = userdb.(*libdb.ContractMasterDB)
+	return nil
+}

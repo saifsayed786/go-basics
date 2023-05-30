@@ -1,0 +1,68 @@
+package service
+
+const (
+	TokenSize       = 200000
+	ExchSize        = 4
+	TimeFormat      = "2006-01-02T15:04:05"
+	FileTimeFormat  = "20060102T15:04:05"
+	Minute1         = "1Min"
+	Minute2         = "2Min"
+	Minute3         = "3Min"
+	Minute4         = "4Min"
+	Minute5         = "5Min"
+	Minute10        = "10Min"
+	Minute15        = "15Min"
+	Minute30        = "30Min"
+	Minute75        = "75Min"
+	Minute125       = "125Min"
+	Hr1             = "1Hr"
+	Hr2             = "2Hr"
+	Hr3             = "3Hr"
+	Day1            = "1Day"
+	DateRangeFormat       = "20060102"
+	NSECD_DECIMAL_LOCATOR = 10000000
+)
+
+var (
+	BasePath         string
+	EqPath           string
+	FoPath           string
+	CdPath           string
+	RawPath          string
+	NSETimeFormat    string
+	NSEEQ_Start_Time string
+	NSEEQ_End_Time   string
+	NSEFO_Start_Time string
+	NSEFO_End_Time   string
+	NSECD_Start_Time string
+	NSECD_End_Time   string
+	NSEEQ_Min_Time   string
+	NSEEQ_MAX_Time   string
+	NSEFO_Min_Time   string
+	NSEFO_MAX_Time   string
+	NSECD_Min_Time   string
+	NSECD_MAX_Time   string
+	RootPath         string
+)
+
+func InitVariable() {
+	RootPath = Env.VOLUMNE_PATH
+	BasePath = Env.BASEPATH
+	EqPath = Env.EQPATH
+	FoPath = Env.FOPATH
+	CdPath = Env.CDPATH
+	RawPath = Env.RAWPATH
+	NSETimeFormat = Env.NSETimeFormat
+	NSEEQ_Start_Time = Env.NSEEQ_Start_Time
+	NSEEQ_End_Time = Env.NSEEQ_End_Time
+	NSEFO_Start_Time = Env.NSEFO_Start_Time
+	NSEFO_End_Time = Env.NSEFO_End_Time
+	NSECD_Start_Time = Env.NSECD_Start_Time
+	NSECD_End_Time = Env.NSECD_End_Time
+	NSEEQ_Min_Time = Env.NSEEQ_Min_Time
+	NSEEQ_MAX_Time = Env.NSEEQ_MAX_Time
+	NSEFO_Min_Time = Env.NSEFO_Min_Time
+	NSEFO_MAX_Time = Env.NSEFO_MAX_Time
+	NSECD_Min_Time = Env.NSECD_Min_Time
+	NSECD_MAX_Time = Env.NSECD_MAX_Time
+}

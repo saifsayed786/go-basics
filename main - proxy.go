@@ -1,69 +1,77 @@
 package main
 
 import (
-	"bytes"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"strconv"
+	"fmt"
+	"unsafe"
 )
 
+type MyStruct struct {
+	Field1 int32
+	Field2 string
+	Field3 bool
+}
+
+func structToBytes(data MyStruct) []byte {
+	var byteSlice []byte
+
+	// Convert the int field to bytes
+	field1Bytes := (*[unsafe.Sizeof(&data.Field1)]byte)(unsafe.Pointer(&data.Field1))[:]
+	byteSlice = append(byteSlice, field1Bytes...)
+
+	// Convert the string field to bytes
+	field2Bytes := []byte(data.Field2)
+	byteSlice = append(byteSlice, field2Bytes...)
+
+	// Convert the bool field to a single byte
+	var field3Byte byte
+	if data.Field3 {
+		field3Byte = 1
+	} else {
+		field3Byte = 0
+	}
+	byteSlice = append(byteSlice, field3Byte)
+
+	return byteSlice
+}
+
 func main() {
-	// Define the target URL of the backend server
-	targetURL := "http://localhost:8000"
-
-	// Parse the target URL
-	target, err := url.Parse(targetURL)
-	if err != nil {
-		log.Fatal("Error parsing target URL:", err)
+	MemorySize()
+	data := MyStruct{
+		Field1: 42,
+		Field2: "Hello, World!",
+		Field3: true,
 	}
 
-	// Create a reverse proxy with a custom Director function
-	proxy := &httputil.ReverseProxy{
-		Director: func(r *http.Request) {
-			r.URL.Scheme = target.Scheme
-			r.URL.Host = target.Host
-			r.Host = target.Host
-			// r.URL.Path = "/addAlbums" + r.URL.Path
-
-			// Modify the request here as needed
-			modifyRequest(r)
-		},
-		ModifyResponse: func(r *http.Response) error {
-			// Modify the response here as needed
-			modifyResponse(r)
-			return nil
-		},
-	}
-
-	// Start the server
-	log.Println("Reverse Proxy Server started on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", proxy))
+	bytes := structToBytes(data)
+	fmt.Println(bytes) // Output: [42 0 0 0 72 101 108 108 111 44 32 87 111 114 108 100 33 1]
+	restoredData := bytesToStruct(bytes)
+	fmt.Println(restoredData)
 }
 
-func modifyRequest(r *http.Request) {
+func MemorySize() {
+	var i int
 
+	var i16 int16
+	var i32 int32
+	var i64 int64
+
+	fmt.Printf("i Type:%T Size:%d\n", i, unsafe.Sizeof(i))
+	fmt.Printf("i16 Type:%T Size:%d\n", i16, unsafe.Sizeof(i16))
+	fmt.Printf("i32 Type:%T Size:%d\n", i32, unsafe.Sizeof(i32))
+	fmt.Printf("i64 Type:%T Size:%d\n", i64, unsafe.Sizeof(i64))
 }
 
-func modifyResponse(r *http.Response) error {
-	originalBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Println("Error reading response body:", err)
-		return err
-	}
-	defer r.Body.Close()
+func bytesToStruct(bytes []byte) MyStruct {
+	var data MyStruct
 
-	// Modify the response body by appending a custom message
-	modifiedBody := append(originalBody, []byte("\nModified by Reverse Proxy")...)
+	// Convert the first 4 bytes to int32
+	data.Field1 = *(*int32)(unsafe.Pointer(&bytes[0]))
 
-	// Set the modified body in the response
-	r.Body = ioutil.NopCloser(bytes.NewReader(modifiedBody))
-	r.ContentLength = int64(len(modifiedBody))
+	// Convert the remaining bytes to string
+	data.Field2 = string(bytes[4 : len(bytes)-1])
 
-	// Update the Content-Length header
-	r.Header.Set("Content-Length", strconv.Itoa(len(modifiedBody)))
-
-	return nil
+	// Convert the last byte to bool
+	data.Field3 = bytes[len(bytes)-1] != 0
+	fmt.Println(data.Field1)
+	return data
 }

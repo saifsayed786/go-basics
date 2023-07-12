@@ -1,0 +1,58 @@
+
+Async Gin Router Setup
+
+
+User
+func GetRouter(router chan *gin.Engine) {
+	gin.ForceConsoleColor()
+	r := gin.Default()
+
+	// r.Use(middlewares.RequestLogger)
+	// r.Use(gin.CustomRecovery(middlewares.LogFailedRequests))
+	r.Use(cors.Default())
+	authMiddleware, _ := middlewares.GetAuthMiddleware()
+
+	// Create a BASE_URL - /api/v1
+	v1 := r.Group("/api/v1/")
+	PublicEndpoints(v1, authMiddleware)
+	AuthenticatedEndpoints(v1.Group("auth"), authMiddleware)
+	router <- r
+}
+package main
+
+import (
+	"basic-go-structure/cron"
+	"basic-go-structure/models"
+	"basic-go-structure/routes"
+	"fmt"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+)
+
+// @title GOLANG BASIC STRUCTURE
+// @version 1.0
+// @Description Golang basic API.
+// @termsOfService http://swagger.io/terms/
+// @contact.name API Support
+// @contact.email
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+// @host localhost:8080
+// @BasePath /api/v1/
+func main() {
+	godotenv.Load()          // Load env variables
+	models.ConnectDataBase() // load db
+
+	// We want to get the router in async, thus a channel is required to return the router instance.
+	var router = make(chan *gin.Engine)
+	go routes.GetRouter(router) //Get router in async.
+
+	cron.InitializeCron()
+
+	r := <-router
+	var port string = os.Getenv("SERVER_PORT")
+	server_addr := fmt.Sprintf(":%s", port)
+	r.Run(server_addr)
+}
